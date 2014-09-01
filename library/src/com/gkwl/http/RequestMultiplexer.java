@@ -99,36 +99,35 @@ public class RequestMultiplexer {
 		}
 		
 		private void handleRequests() {
-			while (!requests.isEmpty()) {
-				HttpRequest request = requests.poll();
-				try {
-					request.http.setKeepConnection(true);
-					request.http.setConnection(conn);
-					request.http.execute();
-					request.handler.sendEmptyMessage(0);
-				} catch (IOException e) {
-					e.printStackTrace();
-					request.handler.sendMessage(request.handler.obtainMessage(1, e));
-				}
-			}
-			
-			try {
-				Thread.sleep(connectionTimeout);
-			} catch (InterruptedException e) {
-				handleRequests();
-				return;
-			}
-			
-			synchronized (RequestMultiplexer.this) {
-				if (!requests.isEmpty()) {
-					handleRequests();
-				} else {
+			while (true) {
+				
+				while (!requests.isEmpty()) {
+					HttpRequest request = requests.poll();
 					try {
-						conn.close();
+						request.http.setKeepConnection(true);
+						request.http.setConnection(conn);
+						request.http.execute();
+						request.handler.sendEmptyMessage(0);
 					} catch (IOException e) {
 						e.printStackTrace();
+						request.handler.sendMessage(request.handler.obtainMessage(1, e));
 					}
 				}
+				
+				try {
+					Thread.sleep(connectionTimeout);
+					synchronized (RequestMultiplexer.this) {
+						try {
+							conn.close();
+						} catch (IOException e) {
+							e.printStackTrace();
+						}
+						break;
+					}
+				} catch (InterruptedException e) {
+					e.printStackTrace();
+				}
+				
 			}
 		}
 	}
