@@ -102,6 +102,7 @@ public class RequestMultiplexer {
 			while (!requests.isEmpty()) {
 				HttpRequest request = requests.poll();
 				try {
+					request.http.setKeepConnection(true);
 					request.http.setConnection(conn);
 					request.http.execute();
 					request.handler.sendEmptyMessage(0);
