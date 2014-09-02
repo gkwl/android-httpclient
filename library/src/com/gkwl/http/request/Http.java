@@ -5,7 +5,6 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.net.SocketException;
 import java.net.URLEncoder;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -17,6 +16,8 @@ import java.util.Map.Entry;
 import java.util.zip.GZIPInputStream;
 
 import org.apache.http.util.ByteArrayBuffer;
+
+import android.text.TextUtils;
 
 import com.gkwl.http.Connection;
 import com.gkwl.http.util.UrlUtil;
@@ -258,9 +259,16 @@ public abstract class Http {
 		Iterator<Entry<String, String>> itor = params.entrySet().iterator();
 		while (itor.hasNext()) {
 			Entry<String, String> en = itor.next();
+			if (TextUtils.isEmpty(en.getKey()))
+				continue;
+			
+			String value = en.getValue();
+			if (value == null)
+				value = "";
+			
 			sb.append(URLEncoder.encode(en.getKey()))
 			  .append("=")
-			  .append(URLEncoder.encode(en.getValue()));
+			  .append(URLEncoder.encode(value));
 			if (itor.hasNext())
 				sb.append("&");
 		}
