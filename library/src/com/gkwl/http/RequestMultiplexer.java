@@ -17,40 +17,45 @@ import com.gkwl.http.request.Http;
  *
  */
 public class RequestMultiplexer {
+	private static class NotifyHandler extends Handler {
+		@Override
+		public void handleMessage(Message msg) {
+			super.handleMessage(msg);
+			HttpRequest request = (HttpRequest) msg.obj;
+			if (msg.what == 0)
+				request.listener.onResponse(request.http.getResCode(), request.http.getResRaw(), request.http.getResBody(), request.http.getHeaders());
+			else
+				request.listener.onFailure(request.exception);
+		}
+	}
+
 	private class HttpRequest {
 		public Http http;
 		public OnResponseListener listener;
 		public Handler handler;
+		public Exception exception;
 		
 		public HttpRequest(Http h, OnResponseListener l) {
 			this.http = h;
 			this.listener = l;
-			if (Looper.getMainLooper().getThread() == Thread.currentThread()) {
-				handler = new Handler() {
-					@Override
-					public void handleMessage(Message msg) {
-						super.handleMessage(msg);
-						if (msg.what == 0)
-							listener.onResponse(http.getResCode(), http.getResRaw(), http.getResBody(), http.getHeaders());
-						else
-							listener.onFailure((Exception) msg.obj);
-					}
-				};
-			}
+			if (Looper.getMainLooper().getThread() == Thread.currentThread())
+				handler = new NotifyHandler();
 		}
 		
 		public void notifyResponse() {
 			if (handler == null)
 				listener.onResponse(http.getResCode(), http.getResRaw(), http.getResBody(), http.getHeaders());
 			else
-				handler.sendEmptyMessage(0);
+				handler.sendMessage(handler.obtainMessage(0, this));
 		}
 		
 		public void notifyError(Exception e) {
+			exception = e;
+
 			if (handler == null)
-				listener.onFailure(e);
+				listener.onFailure(exception);
 			else
-				handler.sendMessage(handler.obtainMessage(1, e));
+				handler.sendMessage(handler.obtainMessage(1, this));
 		}
 	}
 	
