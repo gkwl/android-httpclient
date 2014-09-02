@@ -1,7 +1,6 @@
 package com.gkwl.http;
 
 import java.io.IOException;
-import java.net.SocketException;
 import java.util.LinkedList;
 import java.util.Queue;
 
@@ -26,20 +25,32 @@ public class RequestMultiplexer {
 		public HttpRequest(Http h, OnResponseListener l) {
 			this.http = h;
 			this.listener = l;
-			if (Looper.getMainLooper().getThread() != Thread.currentThread())
-				Looper.prepare();
-			handler = new Handler() {
-				@Override
-				public void handleMessage(Message msg) {
-					super.handleMessage(msg);
-					if (msg.what == 0) {
-						listener.onResponse(http.getResCode(), http.getResRaw(), http.getResBody(), http.getHeaders());
-					} else {
-						Exception e = (Exception) msg.obj;
-						listener.onFailure(e);
+			if (Looper.getMainLooper().getThread() == Thread.currentThread()) {
+				handler = new Handler() {
+					@Override
+					public void handleMessage(Message msg) {
+						super.handleMessage(msg);
+						if (msg.what == 0)
+							listener.onResponse(http.getResCode(), http.getResRaw(), http.getResBody(), http.getHeaders());
+						else
+							listener.onFailure((Exception) msg.obj);
 					}
-				}
-			};
+				};
+			}
+		}
+		
+		public void notifyResponse() {
+			if (handler == null)
+				listener.onResponse(http.getResCode(), http.getResRaw(), http.getResBody(), http.getHeaders());
+			else
+				handler.sendEmptyMessage(0);
+		}
+		
+		public void notifyError(Exception e) {
+			if (handler == null)
+				listener.onFailure(e);
+			else
+				handler.sendMessage(handler.obtainMessage(1, e));
 		}
 	}
 	
@@ -113,10 +124,10 @@ public class RequestMultiplexer {
 						request.http.setKeepConnection(true);
 						request.http.setConnection(conn);
 						request.http.execute();
-						request.handler.sendEmptyMessage(0);
+						request.notifyResponse();
 					} catch (IOException e) {
 						e.printStackTrace();
-						request.handler.sendMessage(request.handler.obtainMessage(1, e));
+						request.notifyError(e);
 					}
 				}
 				
