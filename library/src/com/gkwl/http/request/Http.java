@@ -5,6 +5,7 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.SocketException;
 import java.net.URLEncoder;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -109,7 +110,11 @@ public abstract class Http {
 	    int readContentLength = 0;
 	    boolean foundEmptyLine = false;
 	    
-		while ((read = is.read(buf)) != -1) {
+		while (true) {
+			read = is.read(buf);
+			if (read == -1)
+				throw new IOException("Unexpected end of the stream");
+			
 			bab.append(buf, 0, read);
 			if (foundEmptyLine) {
 				if (chunked) {
