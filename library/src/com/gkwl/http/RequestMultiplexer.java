@@ -91,10 +91,16 @@ public class RequestMultiplexer {
 				conn.setReadTimeout(readTimeout);
 				conn.connect(host, port, connectTimeout);
 				handleRequests();
-			} catch (SocketException e) {
-				e.printStackTrace();
 			} catch (IOException e) {
 				e.printStackTrace();
+				broadcastError(e);
+			}
+		}
+		
+		private void broadcastError(Exception e) {
+			while (!requests.isEmpty()) {
+				HttpRequest request = requests.poll();
+				request.handler.sendMessage(request.handler.obtainMessage(1, e));
 			}
 		}
 		
