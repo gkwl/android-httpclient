@@ -116,7 +116,7 @@ public class RequestMultiplexer {
 		private void broadcastError(Exception e) {
 			while (!requests.isEmpty()) {
 				HttpRequest request = requests.poll();
-				request.handler.sendMessage(request.handler.obtainMessage(1, e));
+				request.notifyError(e);
 			}
 		}
 		
