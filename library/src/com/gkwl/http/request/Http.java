@@ -96,8 +96,8 @@ public abstract class Http {
 		return resHeaders;
 	}
 	
-	private boolean isChunkedEnd(byte[] buf) {
-		return buf[buf.length -1 ] == 10 && buf[buf.length - 2] == 13 && buf[buf.length - 3] == 10 && buf[buf.length - 4] == 13 && buf[buf.length - 5] == 48;
+	private boolean isChunkedEnd(byte[] buf, int read) {
+		return buf[read -1] == 10 && buf[read - 2] == 13 && buf[read - 3] == 10 && buf[read - 4] == 13 && buf[read - 5] == 48;
 	}
 	
 	private byte[] readResponse(Connection conn) throws IOException {
@@ -113,18 +113,20 @@ public abstract class Http {
 	    
 		while (true) {
 			read = is.read(buf);
-			if (read == -1)
-				throw new IOException("Unexpected end of the stream");
 			
-			bab.append(buf, 0, read);
+			if (read != -1)
+				bab.append(buf, 0, read);
+			
 			if (foundEmptyLine) {
 				if (chunked) {
-					if (isChunkedEnd(buf))
+					if (isChunkedEnd(buf, read))
 						break;
-				} else {
+				} else if (contentLength != 0) {
 					readContentLength += read;
 					if (readContentLength == contentLength)
 						break;
+				} else if (read == -1) {
+					break;
 				}
 			} else {
 				byte[] partByte = bab.toByteArray();
@@ -135,7 +137,7 @@ public abstract class Http {
 					if (partBody.toLowerCase().contains("chunked")) {
 						chunked = true;
 						
-						if (isChunkedEnd(buf))
+						if (isChunkedEnd(buf, read))
 							break;
 					}
 					
