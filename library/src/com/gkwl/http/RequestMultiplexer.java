@@ -133,6 +133,9 @@ public class RequestMultiplexer {
 					} catch (IOException e) {
 						e.printStackTrace();
 						request.notifyError(e);
+					} catch (IllegalArgumentException e) {
+						e.printStackTrace();
+						request.notifyError(e);
 					}
 				}
 				

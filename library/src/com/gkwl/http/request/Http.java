@@ -278,7 +278,7 @@ public abstract class Http {
 		return sb.toString();
 	}
 	
-	public byte[] execute() throws IOException {
+	public byte[] execute() throws IOException, IllegalArgumentException {
 		if (conn != null && !conn.isAvaliable())
 			throw new IllegalArgumentException("Connection invalid!");
 		
