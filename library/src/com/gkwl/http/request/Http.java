@@ -108,14 +108,18 @@ public abstract class Http {
 
 	    boolean chunked = false;
 	    int contentLength = 0;
+	    boolean noneChunkedOrLength = false;
+	    
 	    int readContentLength = 0;
 	    boolean foundEmptyLine = false;
 	    
 		while (true) {
 			read = is.read(buf);
 			
-			if (read != -1)
+			if (read > -1)
 				bab.append(buf, 0, read);
+			else if (!noneChunkedOrLength)
+				throw new IOException("Unexpected end of the stream");
 			
 			if (foundEmptyLine) {
 				if (chunked) {
@@ -125,24 +129,23 @@ public abstract class Http {
 					readContentLength += read;
 					if (readContentLength == contentLength)
 						break;
-				} else if (read == -1) {
-					break;
+				} else if (noneChunkedOrLength) {
+					if (read == -1)
+						break;
 				}
 			} else {
 				byte[] partByte = bab.toByteArray();
-				String partBody = new String(partByte, 0, partByte.length);
+				String partBody = new String(partByte, 0, partByte.length).toLowerCase();
 				int emptyLineIndex = partBody.indexOf(CL + CL);
 				if (emptyLineIndex != -1) {
 					foundEmptyLine = true;
-					if (partBody.toLowerCase().contains("chunked")) {
+					if (partBody.contains("chunked")) {
 						chunked = true;
 						
 						if (isChunkedEnd(buf, read))
 							break;
-					}
-					
-					int in = partBody.toLowerCase().indexOf("content-length");
-					if (in != -1) {
+					} else if (partBody.contains("content-length")) {
+						int in = partBody.indexOf("content-length");
 						int j = partBody.indexOf(CL, in);
 						String h = partBody.substring(in, j);
 						String[] parts = h.split(": ");
@@ -151,6 +154,8 @@ public abstract class Http {
 						readContentLength += partByte.length - partBody.substring(0, emptyLineIndex + (CL + CL).length()).getBytes().length;
 						if (readContentLength == contentLength)
 							break;
+					} else {
+						noneChunkedOrLength = true;
 					}
 				}
 			}
