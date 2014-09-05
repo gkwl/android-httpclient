@@ -139,6 +139,9 @@ public class RequestMultiplexer {
 					}
 				}
 				
+				if (!conn.isAvaliable())
+					break;
+				
 				try {
 					Thread.sleep(connectionTimeout);
 					synchronized (RequestMultiplexer.this) {

@@ -135,7 +135,11 @@ public abstract class Http {
 				}
 			} else {
 				byte[] partByte = bab.toByteArray();
-				String partBody = new String(partByte, 0, partByte.length).toLowerCase();
+				String partBody = new String(partByte).toLowerCase();
+				
+				if (partBody.contains("connection: close"))
+					this.conn.close();
+				
 				int emptyLineIndex = partBody.indexOf(CL + CL);
 				if (emptyLineIndex != -1) {
 					foundEmptyLine = true;
