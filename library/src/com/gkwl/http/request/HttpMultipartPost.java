@@ -35,9 +35,10 @@ public class HttpMultipartPost extends HttpPost {
 	
 	@Override
 	protected void appendHeaders(OutputStream os) {
-		String real = "WebKitFormBoundaryUoBKFJTqwNSCAwOp";
-		String boundary = "--" + real;
-		String end = "--" + real + "--";
+		byte[] boundary = "WebKitFormBoundaryUoBKFJTqwNSCAwOp".getBytes();
+		byte[] dash = "--".getBytes();
+		byte[] cl = CL.getBytes();
+		
 		if (postBody == null) {
 			ByteArrayBuffer bab = new ByteArrayBuffer(0);
 			
@@ -46,42 +47,52 @@ public class HttpMultipartPost extends HttpPost {
 			while (i.hasNext()) {
 				Entry<String, String> e = i.next();
 				
-				byte[] bs = (boundary + CL).getBytes();
-				bab.append(bs, 0, bs.length);
+				bab.append(dash, 0, dash.length);
+				bab.append(boundary, 0, boundary.length);
+				bab.append(cl, 0, cl.length);
 				
-				bs = ("Content-Disposition: form-data; name=\"" + e.getKey() + "\"" + CL + CL).getBytes();
+				byte[] bs = ("Content-Disposition: form-data; name=\"" + e.getKey() + "\"").getBytes();
 				bab.append(bs, 0, bs.length);
+				bab.append(cl, 0, cl.length);
+				bab.append(cl, 0, cl.length);
 				
-				bs = (e.getValue() + CL).getBytes();
+				bs = e.getValue().getBytes();
 				bab.append(bs, 0, bs.length);
+				bab.append(cl, 0, cl.length);
 				
 				if (!i.hasNext() && files.isEmpty()) {
-					bs = (end + CL).getBytes();
-					bab.append(bs, 0, bs.length);
+					bab.append(dash, 0, dash.length);
+					bab.append(boundary, 0, boundary.length);
+					bab.append(dash, 0, dash.length);
+					bab.append(cl, 0, cl.length);
 				}
 			}
 			
 			// files
 			for (UploadFile uf : files) {
-				byte[] bs = (boundary + CL).getBytes();
-				bab.append(bs, 0, bs.length);
+				bab.append(dash, 0, dash.length);
+				bab.append(boundary, 0, boundary.length);
+				bab.append(cl, 0, cl.length);
 				
-				bs = ("Content-Disposition: form-data; name=\"" + uf.fieldName + "\"; filename=\"" + uf.upload.getName() + "\"" + CL).getBytes();
+				byte[] bs = ("Content-Disposition: form-data; name=\"" + uf.fieldName + "\"; filename=\"" + uf.upload.getName() + "\"").getBytes();
 				bab.append(bs, 0, bs.length);
+				bab.append(cl, 0, cl.length);
 				
-				bs = ("Content-Type: " + uf.mime + CL + CL).getBytes();
+				bs = ("Content-Type: " + uf.mime).getBytes();
 				bab.append(bs, 0, bs.length);
+				bab.append(cl, 0, cl.length);
+				bab.append(cl, 0, cl.length);
 				
 				bs = FileUtil.toByteArray(uf.upload);
 				if (bs != null)
 					bab.append(bs, 0, bs.length);
 				
-				bs = (CL).getBytes();
-				bab.append(bs, 0, bs.length);
+				bab.append(cl, 0, cl.length);
 				
 				if (!i.hasNext()) {
-					bs = (end).getBytes();
-					bab.append(bs, 0, bs.length);
+					bab.append(dash, 0, dash.length);
+					bab.append(boundary, 0, boundary.length);
+					bab.append(dash, 0, dash.length);
 				}
 			}
 
@@ -90,7 +101,9 @@ public class HttpMultipartPost extends HttpPost {
 		
 		super.appendHeaders(os);
 		try {
-			os.write(("Content-Type: multipart/form-data; boundary=" + real + CL).getBytes());
+			os.write(("Content-Type: multipart/form-data; boundary=").getBytes());
+			os.write(boundary);
+			os.write(cl);
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
