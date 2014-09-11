@@ -30,7 +30,7 @@ public class Connection {
 	}
 	
 	public boolean isAvaliable() {
-		return socket.isConnected() && !socket.isClosed();
+		return socket != null && socket.isConnected() && !socket.isClosed();
 	}
 	
 	public void close() throws IOException {

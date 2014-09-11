@@ -1,6 +1,7 @@
 package com.gkwl.http;
 
 import java.io.IOException;
+import java.net.SocketTimeoutException;
 import java.util.LinkedList;
 import java.util.Queue;
 
@@ -133,6 +134,8 @@ public class RequestMultiplexer {
 					} catch (IOException e) {
 						e.printStackTrace();
 						request.notifyError(e);
+						if (!(e instanceof SocketTimeoutException))
+							return;
 					} catch (IllegalArgumentException e) {
 						e.printStackTrace();
 						request.notifyError(e);
@@ -153,7 +156,6 @@ public class RequestMultiplexer {
 						break;
 					}
 				} catch (InterruptedException e) {
-					e.printStackTrace();
 				}
 				
 			}
