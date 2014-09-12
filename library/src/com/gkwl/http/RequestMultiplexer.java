@@ -3,7 +3,7 @@ package com.gkwl.http;
 import java.io.IOException;
 import java.net.SocketTimeoutException;
 import java.util.LinkedList;
-import java.util.Queue;
+import java.util.List;
 
 import android.os.Handler;
 import android.os.Looper;
@@ -60,8 +60,7 @@ public class RequestMultiplexer {
 		}
 	}
 	
-	private Thread thread;
-	private Queue<HttpRequest> requests = new LinkedList<HttpRequest>();
+	private List<HandleRequestThread> threads = new LinkedList<HandleRequestThread>();
 	
 	private String host;
 	private int port;
@@ -88,18 +87,29 @@ public class RequestMultiplexer {
 	}
 
 	public synchronized void put(Http http, OnResponseListener onResponseListener) {
-		requests.offer(new HttpRequest(http, onResponseListener));
-		
-		if (thread == null || !thread.isAlive()) {
-			thread = new HandleRequestThread();
-			thread.start();
-		} else {
-			thread.interrupt();
+		HttpRequest request = new HttpRequest(http, onResponseListener);
+		for (HandleRequestThread t : threads) {
+			if (!t.isReady()) {
+				t.readyRequest(request);
+				t.interrupt();
+				return;
+			}
 		}
+		
+		HandleRequestThread t = new HandleRequestThread(request);
+		threads.add(t);
+		t.start();
 	}
 	
 	private class HandleRequestThread extends Thread {
 		private Connection conn;
+		private HttpRequest request;
+		private boolean isReady;
+		
+		public HandleRequestThread(HttpRequest request) {
+			this.request = request;
+			isReady = true;
+		}
 		
 		@Override
 		public void run() {
@@ -107,25 +117,26 @@ public class RequestMultiplexer {
 			try {
 				conn.setReadTimeout(readTimeout);
 				conn.connect(host, port, connectTimeout);
-				handleRequests();
+				handleRequest();
 			} catch (IOException e) {
 				e.printStackTrace();
-				broadcastError(e);
-			}
-		}
-		
-		private void broadcastError(Exception e) {
-			while (!requests.isEmpty()) {
-				HttpRequest request = requests.poll();
 				request.notifyError(e);
 			}
 		}
 		
-		private void handleRequests() {
+		public void readyRequest(HttpRequest request) {
+			this.request = request;
+			isReady = true;
+		}
+		
+		public boolean isReady() {
+			return isReady;
+		}
+		
+		private void handleRequest() {
 			while (true) {
 				
-				while (!requests.isEmpty()) {
-					HttpRequest request = requests.poll();
+				if (request != null) {
 					try {
 						request.http.setKeepConnection(true);
 						request.http.setConnection(conn);
@@ -145,17 +156,18 @@ public class RequestMultiplexer {
 				if (!conn.isAvaliable())
 					break;
 				
+				isReady = false;
+				
 				try {
 					Thread.sleep(connectionTimeout);
 					synchronized (RequestMultiplexer.this) {
-						try {
-							conn.close();
-						} catch (IOException e) {
-							e.printStackTrace();
-						}
-						break;
+						conn.close();
+						threads.remove(this);
+						return;
 					}
 				} catch (InterruptedException e) {
+				} catch (IOException e) {
+					e.printStackTrace();
 				}
 				
 			}
