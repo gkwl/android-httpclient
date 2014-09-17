@@ -34,16 +34,16 @@ public class HttpMultipartPost extends HttpPost {
 	}
 	
 	@Override
-	protected void appendHeaders(OutputStream os) {
+	protected void appendHeaders(OutputStream os) throws NullPointerException, IOException {
 		byte[] boundary = "WebKitFormBoundaryUoBKFJTqwNSCAwOp".getBytes();
 		byte[] dash = "--".getBytes();
 		byte[] cl = CL.getBytes();
 		
-		if (postBody == null) {
+		if (reqBody == null) {
 			ByteArrayBuffer bab = new ByteArrayBuffer(0);
 			
 			// strs
-			Iterator<Entry<String, String>> i = params.entrySet().iterator();
+			Iterator<Entry<String, String>> i = reqParams.entrySet().iterator();
 			while (i.hasNext()) {
 				Entry<String, String> e = i.next();
 				
@@ -96,16 +96,12 @@ public class HttpMultipartPost extends HttpPost {
 				}
 			}
 
-			postBody = bab.toByteArray();
+			reqBody = bab.toByteArray();
 		}
 		
 		super.appendHeaders(os);
-		try {
-			os.write(("Content-Type: multipart/form-data; boundary=").getBytes());
-			os.write(boundary);
-			os.write(cl);
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
+		os.write(("Content-Type: multipart/form-data; boundary=").getBytes());
+		os.write(boundary);
+		os.write(cl);
 	}
 }

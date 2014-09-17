@@ -9,11 +9,7 @@ public class HttpGet extends Http {
 	}
 	
 	@Override
-	protected String getResource(String url) {
-		return super.getResource(url) + getParams();
-	}
-
-	protected String getParams() {
-		return makeParams(new StringBuffer("?"));
+	protected String getResource() throws NullPointerException {
+		return super.getResource() + makeParams(new StringBuffer("?"));
 	}
 }

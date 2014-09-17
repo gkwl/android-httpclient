@@ -30,7 +30,7 @@ public class Connection {
 	}
 	
 	public boolean isAvaliable() {
-		return socket != null && socket.isConnected() && !socket.isClosed();
+		return socket.isConnected() && !socket.isClosed();
 	}
 	
 	public void close() throws IOException {
@@ -41,7 +41,7 @@ public class Connection {
 		connect(host, port, 0);
 	}
 	
-	public void connect(String host, int port, int timeout) throws IOException {
+	public void connect(String host, int port, int timeout) throws IOException, IllegalArgumentException {
 		this.host = host;
 		this.port = port;
 		SocketAddress remoteAddr = new InetSocketAddress(host, port);

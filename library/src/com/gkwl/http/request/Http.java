@@ -5,6 +5,8 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.MalformedURLException;
+import java.net.URL;
 import java.net.URLEncoder;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -20,33 +22,32 @@ import org.apache.http.util.ByteArrayBuffer;
 import android.text.TextUtils;
 
 import com.gkwl.http.Connection;
-import com.gkwl.http.util.UrlUtil;
 
 public abstract class Http {
 	protected static final String CL = "\r\n";
+	protected static final String DOUBLE_CL = "\r\n\r\n";
 	
 	private Connection conn;
-	private String url;
-	protected byte[] postBody;
+	private int readBufSize = 8192;
+	private boolean keepConnection = false;
+	
+	private URL reqUrl;
+	protected byte[] reqBody;
+	protected HashMap<String, String> reqHeaders = new HashMap<String, String>();
+	protected HashMap<String, String> reqParams = new HashMap<String, String>();
 	
 	private int resCode;
 	private byte[] resRaw;
 	private byte[] resBody;
-	private Map<String, List<String>> resHeaders;
-	
-	private int readBufSize = 8192;
-	private boolean keepConnection = false;
-	
-	protected Map<String, String> headers = new HashMap<String, String>();
-	protected Map<String, String> params = new HashMap<String, String>();
+	private HashMap<String, List<String>> resHeaders = new HashMap<String, List<String>>();
 	
 	protected abstract String method();
 	
-	protected void appendHeaders(OutputStream os) {
+	protected void appendHeaders(OutputStream os) throws IOException {
 	}
 	
-	protected String getResource(String url) {
-		return UrlUtil.getResource(url);
+	protected String getResource() throws NullPointerException {
+		return reqUrl.getPath();
 	}
 	
 	public Http() {
@@ -56,16 +57,19 @@ public abstract class Http {
 		this.conn = conn;
 	}
 	
-	public void close() throws IOException {
+	public void close() throws NullPointerException, IOException {
 		conn.close();
 	}
 	
-	public void setUrl(String url) {
-		this.url = url;
+	public void setUrl(String urlStr) throws MalformedURLException, IllegalArgumentException {
+		URL url = new URL(urlStr);
+		if (!url.getProtocol().equals("http"))
+			throw new IllegalArgumentException();
+		this.reqUrl = url;
 	}
 	
-	public String getUrl() {
-		return url;
+	public URL getUrl() {
+		return reqUrl;
 	}
 	
 	public void setConnection(Connection conn) {
@@ -77,7 +81,7 @@ public abstract class Http {
 	}
 	
 	public void setBody(byte[] body) {
-		this.postBody = body;
+		this.reqBody = body;
 	}
 	
 	public byte[] getResBody() {
@@ -96,13 +100,14 @@ public abstract class Http {
 		return resHeaders;
 	}
 	
-	private boolean isChunkedEnd(byte[] buf, int read) {
-		return buf[read -1] == 10 && buf[read - 2] == 13 && buf[read - 3] == 10 && buf[read - 4] == 13 && buf[read - 5] == 48;
+	protected boolean isChunkedEnd(byte[] buf, int read) throws NullPointerException, IllegalArgumentException {
+		if (read < 5 || buf.length < read)
+			throw new IllegalArgumentException();
+		return buf[read - 1] == '\n' && buf[read - 2] == '\r' && buf[read - 3] == '\n' && buf[read - 4] == '\r' && buf[read - 5] == '0';
 	}
 	
-	private byte[] readResponse(Connection conn) throws IOException {
+	protected byte[] readResponse(InputStream is) throws NullPointerException, IOException, IllegalArgumentException, NumberFormatException {
 		ByteArrayBuffer bab = new ByteArrayBuffer(readBufSize);
-		InputStream is = conn.getInputStream();
 	    byte[] buf = new byte[readBufSize];
 	    int read = -1;
 
@@ -119,90 +124,103 @@ public abstract class Http {
 			if (read > -1)
 				bab.append(buf, 0, read);
 			else if (!noneChunkedOrLength)
-				throw new IOException("Unexpected end of the stream");
+				throw new IOException();
 			
-			if (foundEmptyLine) {
-				if (chunked) {
-					if (isChunkedEnd(buf, read))
-						break;
-				} else if (contentLength != 0) {
-					readContentLength += read;
-					if (readContentLength == contentLength)
-						break;
-				} else if (noneChunkedOrLength) {
-					if (read == -1)
-						break;
-				}
-			} else {
+			if (!foundEmptyLine) {
 				byte[] partByte = bab.toByteArray();
 				String partBody = new String(partByte).toLowerCase();
 				
 				if (partBody.contains("connection: close"))
-					this.conn.close();
+					keepConnection = false;
 				
-				int emptyLineIndex = partBody.indexOf(CL + CL);
+				int emptyLineIndex = partBody.indexOf(DOUBLE_CL);
 				if (emptyLineIndex != -1) {
 					foundEmptyLine = true;
 					if (partBody.contains("chunked")) {
 						chunked = true;
-						
-						if (isChunkedEnd(buf, read))
-							break;
 					} else if (partBody.contains("content-length")) {
-						int in = partBody.indexOf("content-length");
-						int j = partBody.indexOf(CL, in);
-						String h = partBody.substring(in, j);
-						String[] parts = h.split(": ");
-						contentLength = Integer.parseInt(parts[1]);
+						int b = partBody.indexOf("content-length");
+						if (b > emptyLineIndex)
+							throw new IllegalArgumentException();
+						int e = partBody.indexOf(CL, b);
 						
-						readContentLength += partByte.length - partBody.substring(0, emptyLineIndex + (CL + CL).length()).getBytes().length;
-						if (readContentLength == contentLength)
-							break;
+						String contentLengthHeader = partBody.substring(b, e);
+						String[] parts = contentLengthHeader.split(": ");
+						if (parts.length != 2)
+							throw new IllegalArgumentException();
+						contentLength = Integer.parseInt(parts[1]);
+						read = partByte.length - emptyLineIndex - DOUBLE_CL.length();
 					} else {
 						noneChunkedOrLength = true;
 					}
 				}
 			}
+			
+			if (chunked) {
+				if (isChunkedEnd(buf, read))
+					break;
+			} else if (contentLength != 0) {
+				readContentLength += read;
+				if (readContentLength == contentLength)
+					break;
+			} else if (noneChunkedOrLength) {
+				if (read == -1)
+					break;
+			}
 		}
 		
 		resRaw = bab.toByteArray();
 		resCode = parseCode(resRaw);
-		resHeaders = parseHeaders(resRaw);
+		resHeaders.clear();
+		resHeaders.putAll(parseHeaders(resRaw));
 		resBody = parseBody(resRaw);
 		
 		return resBody;
 	}
 	
-	private Map<String, List<String>> parseHeaders(byte[] rawByte) {
+	protected HashMap<String, List<String>> parseHeaders(byte[] rawByte) throws NullPointerException, IllegalArgumentException {
 		String raw = new String(rawByte);
 		int statusCl = raw.indexOf(CL);
-		int emptyLine = raw.indexOf(CL + CL);
+		if (statusCl == -1)
+			throw new IllegalArgumentException();
+		int emptyLine = raw.indexOf(DOUBLE_CL, statusCl + 1);
+		if (emptyLine == -1)
+			throw new IllegalArgumentException();
 		String headers = raw.substring(statusCl + CL.length(), emptyLine);
 		
-		Map<String, List<String>> ms = new HashMap<String, List<String>>();
+		HashMap<String, List<String>> ms = new HashMap<String, List<String>>();
 		String[] hs = headers.split(CL);
 		for (String s : hs) {
-			String[] parts = s.split(": ");
-			if (!ms.containsKey(parts[0]))
-				ms.put(parts[0], new LinkedList<String>());
-			ms.get(parts[0]).add(parts[1]);
+			int t = s.indexOf(": ");
+			if (t != -1) {
+				String key = s.substring(0, t);
+				String value = s.substring(t + ": ".length());
+				if (TextUtils.isEmpty(key))
+					continue;
+				
+				if (!ms.containsKey(key))
+					ms.put(key, new LinkedList<String>());
+				ms.get(key).add(value);
+			}
 		}
 		
 		return ms;
 	}
 	
-	private byte[] decodeChunked(byte[] body) {
+	protected byte[] decodeChunked(byte[] body, int bodyBegin) throws NullPointerException, IllegalArgumentException, NumberFormatException {
 		ByteArrayBuffer bab = new ByteArrayBuffer(body.length);
 		final int crlfByteCount = 2;
-		int byteCountEnd = 0;
-		int byteCountBegin = 0;
+		int byteCountEnd = bodyBegin;
+		int byteCountBegin = bodyBegin;
 		
 		while (true) {
+			if (byteCountEnd > body.length - 2)
+				throw new IllegalArgumentException();
+			
 			int f = body[byteCountEnd];
 			int s = body[byteCountEnd + 1];
 			
-			// \r:13 \n:10
-			if (f != 13 || s != 10) {
+			if (f != '\r' || s != '\n') {
 				byteCountEnd++;
 			} else {
 				String hex = new String(body, byteCountBegin, byteCountEnd - byteCountBegin);
@@ -211,46 +229,47 @@ public abstract class Http {
 				Integer decimal = Integer.parseInt(hex, 16);
 				
 				int chunkedBegin = byteCountEnd + crlfByteCount;
-				int chunkedEnd = chunkedBegin + decimal;
-				byte[] sub = Arrays.copyOfRange(body, chunkedBegin, chunkedEnd);
-				bab.append(sub, 0, sub.length);
+				if (chunkedBegin >= body.length || chunkedBegin + decimal > body.length)
+					throw new IllegalArgumentException();
 				
-				byteCountBegin = chunkedEnd + crlfByteCount;
+				bab.append(body, chunkedBegin, decimal);
+				
+				byteCountBegin = chunkedBegin + decimal + crlfByteCount;
 				byteCountEnd = byteCountBegin;
 			}
 		}
 		return bab.toByteArray();
 	}
 	
-	private byte[] decodeGzipped(byte[] gzippedBody) {
-		try {
-			ByteArrayBuffer bab = new ByteArrayBuffer(gzippedBody.length);
-			ByteArrayInputStream bais = new ByteArrayInputStream(gzippedBody);
-			GZIPInputStream zis = new GZIPInputStream(bais);
-			int read = -1;
-			byte[] buf = new byte[readBufSize];
-			while ((read = zis.read(buf)) != -1)
-				bab.append(buf, 0, read);
-			return bab.toByteArray();
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
-		return null;
+	protected byte[] decodeGzipped(byte[] gzippedBody) throws NullPointerException, IOException {
+		ByteArrayBuffer bab = new ByteArrayBuffer(gzippedBody.length);
+		ByteArrayInputStream bais = new ByteArrayInputStream(gzippedBody);
+		GZIPInputStream zis = new GZIPInputStream(bais);
+		int read = -1;
+		byte[] buf = new byte[readBufSize];
+		while ((read = zis.read(buf)) != -1)
+			bab.append(buf, 0, read);
+		return bab.toByteArray();
 	}
 	
-	private byte[] parseBody(byte[] rawByte) {
+	protected byte[] parseBody(byte[] rawByte) throws NullPointerException, IOException, IllegalArgumentException {
 		String raw = new String(rawByte);
-		int first = raw.indexOf(CL + CL);
-		String upper = raw.substring(0, first);
+		int first = raw.indexOf(DOUBLE_CL);
+		if (first == -1)
+			throw new IllegalArgumentException();
 		
-		int bodyBegin = (upper + CL + CL).getBytes().length;
-		byte[] body = Arrays.copyOfRange(rawByte, bodyBegin, rawByte.length);
+		String upper = raw.substring(0, first);
 		
 		boolean chunked = upper.toLowerCase().contains("transfer-encoding: chunked");
 		boolean gzipped = upper.toLowerCase().contains("content-encoding: gzip");
 		
+		byte[] body = null;
+		int bodyBegin = upper.getBytes().length + DOUBLE_CL.getBytes().length;
+		
 		if (chunked)
-			body = decodeChunked(body);
+			body = decodeChunked(rawByte, bodyBegin);
+		else
+			body = Arrays.copyOfRange(rawByte, bodyBegin, rawByte.length);
 		
 		if (gzipped)
 			body = decodeGzipped(body);
@@ -258,16 +277,20 @@ public abstract class Http {
 		return body;
 	}
 	
-	private int parseCode(byte[] rawByte) {
+	protected int parseCode(byte[] rawByte) throws NullPointerException, IllegalArgumentException, NumberFormatException {
 		String raw = new String(rawByte);
 		int first = raw.indexOf(CL);
-		String status = raw.substring(0, first);
-		String[] parts = status.split(" ");
+		if (first == -1)
+			throw new IllegalArgumentException();
+		String statusLine = raw.substring(0, first);
+		String[] parts = statusLine.split(" ");
+		if (parts.length < 2)
+			throw new IllegalArgumentException();
 		return Integer.parseInt(parts[1]);
 	}
 	
-	protected String makeParams(StringBuffer sb) {
-		Iterator<Entry<String, String>> itor = params.entrySet().iterator();
+	protected String makeParams(StringBuffer sb) throws NullPointerException {
+		Iterator<Entry<String, String>> itor = reqParams.entrySet().iterator();
 		while (itor.hasNext()) {
 			Entry<String, String> en = itor.next();
 			if (TextUtils.isEmpty(en.getKey()))
@@ -287,42 +310,39 @@ public abstract class Http {
 		return sb.toString();
 	}
 	
-	public byte[] execute() throws IOException, IllegalArgumentException {
+	public byte[] execute() throws NullPointerException, IOException, IllegalArgumentException, NumberFormatException {
 		if (conn != null && !conn.isAvaliable())
-			throw new IllegalArgumentException("Connection invalid!");
+			throw new IllegalArgumentException();
 		
-		if (!UrlUtil.getScheme(url).equals("http"))
-			throw new IllegalArgumentException("Not http scheme!");
-		
-		String host = (conn == null ? UrlUtil.getHost(url) : conn.getHost());
-		String res = getResource(url);
+		String host = (conn == null ? reqUrl.getHost() : conn.getHost());
+		String res = getResource();
 		
 		if (conn == null)
-			conn = new Connection(host, UrlUtil.getPort(url));
+			conn = new Connection(host, reqUrl.getPort() == -1 ? 80 : reqUrl.getPort());
 		
 		// headers
 		BufferedOutputStream os = new BufferedOutputStream(conn.getOutPutstream());
 		os.write((method() + " " + res + " HTTP/1.1" + CL).getBytes());
 		os.write(("Host: " + host + CL).getBytes());
-		Iterator<Entry<String, String>> itor = headers.entrySet().iterator();
+		Iterator<Entry<String, String>> itor = reqHeaders.entrySet().iterator();
 		while (itor.hasNext()) {
 			Entry<String, String> en = itor.next();
 			os.write((en.getKey() + ": " + en.getValue() + CL).getBytes());
 		}
-		if (keepConnection && !headers.containsKey("Connection"))
+		if (keepConnection && !reqHeaders.containsKey("Connection"))
 			os.write(("Connection: Keep-Alive" + CL).getBytes());
 		appendHeaders(os);
 		
 		os.write(CL.getBytes());
 		
 		// body
-		if (postBody != null)
-			os.write(postBody);
+		if (reqBody != null)
+			os.write(reqBody);
 		
 		os.flush();
 		
 		// response
-		byte[] response = readResponse(conn);
+		byte[] response = readResponse(conn.getInputStream());
 	    
 		// if should close
 	    if (!keepConnection)
@@ -331,37 +351,35 @@ public abstract class Http {
 		return response;
 	}
 	
-	public void addParams(Map<String, String> params) {
-		this.params.putAll(params);
+	public void addParams(Map<String, String> params) throws NullPointerException {
+		this.reqParams.putAll(params);
 	}
 	
-	public void addParam(String key, String value) {
-		params.put(key, value);
+	public void addParam(String key, String value) throws NullPointerException {
+		reqParams.put(key, value);
 	}
 	
 	public void removeParam(String key) {
-		params.remove(key);
+		reqParams.remove(key);
 	}
 	
 	public void clearParam() {
-		params.clear();
+		reqParams.clear();
 	}
 	
-	public void addHeaders(Map<String, String> headers) {
-		if (headers == null)
-			return;
-		this.headers.putAll(headers);
+	public void addHeaders(Map<String, String> headers) throws NullPointerException {
+		this.reqHeaders.putAll(headers);
 	}
 	
-	public void addHeader(String key, String value) {
-		headers.put(key, value);
+	public void addHeader(String key, String value) throws NullPointerException {
+		reqHeaders.put(key, value);
 	}
 	
 	public void removeHeader(String key) {
-		headers.remove(key);
+		reqHeaders.remove(key);
 	}
 	
 	public void clearHeader() {
-		headers.clear();
+		reqHeaders.clear();
 	}
 }

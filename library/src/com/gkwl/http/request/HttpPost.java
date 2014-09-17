@@ -1,5 +1,6 @@
 package com.gkwl.http.request;
 
+import java.io.IOException;
 import java.io.OutputStream;
 
 public class HttpPost extends Http {
@@ -10,16 +11,12 @@ public class HttpPost extends Http {
 	}
 	
 	@Override
-	protected void appendHeaders(OutputStream os) {
+	protected void appendHeaders(OutputStream os) throws NullPointerException, IOException {
 		super.appendHeaders(os);
-		if (postBody == null)
-			postBody = makeParams(new StringBuffer()).getBytes();
+		if (reqBody == null)
+			reqBody = makeParams(new StringBuffer()).getBytes();
 		
-		try {
-			if (!headers.containsKey("Content-Length"))
-				os.write(("Content-Length: " + postBody.length + CL).getBytes());
-		} catch (Exception e) {
-			e.printStackTrace();
-		}
+		if (!reqHeaders.containsKey("Content-Length"))
+			os.write(("Content-Length: " + reqBody.length + CL).getBytes());
 	}
 }

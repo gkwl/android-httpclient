@@ -13,7 +13,7 @@ import com.gkwl.http.listener.OnResponseListener;
 import com.gkwl.http.request.Http;
 
 /**
- * One connection only now
+ *
  * @author kwl
  *
  */
@@ -21,12 +21,22 @@ public class RequestMultiplexer {
 	private static class NotifyHandler extends Handler {
 		@Override
 		public void handleMessage(Message msg) {
-			super.handleMessage(msg);
+			if (msg == null || msg.obj == null || (!(msg.obj instanceof HttpRequest)))
+				return;
+			
 			HttpRequest request = (HttpRequest) msg.obj;
-			if (msg.what == 0)
-				request.listener.onResponse(request.http.getResCode(), request.http.getResRaw(), request.http.getResBody(), request.http.getHeaders());
-			else
+			
+			if (msg.what == 0) {
+				Http http = request.http;
+				if (http == null || request.listener == null)
+					return;
+				
+				request.listener.onResponse(http.getResCode(), http.getResRaw(), http.getResBody(), http.getHeaders());
+			} else if (msg.what == 1) {
+				if (request.listener == null)
+					return;
 				request.listener.onFailure(request.exception);
+			}
 		}
 	}
 
@@ -44,19 +54,25 @@ public class RequestMultiplexer {
 		}
 		
 		public void notifyResponse() {
-			if (handler == null)
+			if (handler == null) {
+				if (listener == null || http == null)
+					return;
 				listener.onResponse(http.getResCode(), http.getResRaw(), http.getResBody(), http.getHeaders());
-			else
+			} else {
 				handler.sendMessage(handler.obtainMessage(0, this));
+			}
 		}
 		
 		public void notifyError(Exception e) {
 			exception = e;
 
-			if (handler == null)
+			if (handler == null) {
+				if (listener == null)
+					return;
 				listener.onFailure(exception);
-			else
+			} else {
 				handler.sendMessage(handler.obtainMessage(1, this));
+			}
 		}
 	}
 	
@@ -118,7 +134,7 @@ public class RequestMultiplexer {
 				conn.setReadTimeout(readTimeout);
 				conn.connect(host, port, connectTimeout);
 				handleRequest();
-			} catch (IOException e) {
+			} catch (Exception e) {
 				e.printStackTrace();
 				request.notifyError(e);
 			}
@@ -136,20 +152,17 @@ public class RequestMultiplexer {
 		private void handleRequest() {
 			while (true) {
 				
-				if (request != null) {
+				if (request != null && request.http != null) {
 					try {
 						request.http.setKeepConnection(true);
 						request.http.setConnection(conn);
 						request.http.execute();
 						request.notifyResponse();
-					} catch (IOException e) {
+					} catch (Exception e) {
 						e.printStackTrace();
 						request.notifyError(e);
 						if (!(e instanceof SocketTimeoutException))
 							return;
-					} catch (IllegalArgumentException e) {
-						e.printStackTrace();
-						request.notifyError(e);
 					}
 				}
 				
@@ -168,6 +181,7 @@ public class RequestMultiplexer {
 				} catch (InterruptedException e) {
 				} catch (IOException e) {
 					e.printStackTrace();
+					return;
 				}
 				
 			}
