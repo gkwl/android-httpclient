@@ -10,5 +10,5 @@ public abstract class OnTextResponseListener extends OnResponseListener {
 		onResponse(code, new String(response), new String(body), headers);
 	}
 
-	public abstract void onResponse(int code, String body, String response, Map<String, List<String>> headers);
+	public abstract void onResponse(int code, String response, String body, Map<String, List<String>> headers);
 }
