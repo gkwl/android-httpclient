@@ -47,7 +47,7 @@ public abstract class Http {
 	}
 	
 	protected String getResource() throws NullPointerException {
-		return reqUrl.getPath();
+		return reqUrl.getPath().equals("") ? "/" : reqUrl.getPath();
 	}
 	
 	public Http() {
