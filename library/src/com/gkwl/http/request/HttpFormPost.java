@@ -3,7 +3,7 @@ package com.gkwl.http.request;
 import java.io.IOException;
 import java.io.OutputStream;
 
-public class HttpFromPost extends HttpPost {
+public class HttpFormPost extends HttpPost {
 	@Override
 	protected void appendHeaders(OutputStream os) throws NullPointerException, IOException {
 		super.appendHeaders(os);
