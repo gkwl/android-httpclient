@@ -29,6 +29,10 @@ public class HttpMultipartPost extends HttpPost {
 	
 	private List<UploadFile> files = new LinkedList<UploadFile>();
 	
+	public void addFile(UploadFile file) {
+		this.files.add(file);
+	}
+	
 	public void addFiles(List<UploadFile> files) {
 		this.files.addAll(files);
 	}
