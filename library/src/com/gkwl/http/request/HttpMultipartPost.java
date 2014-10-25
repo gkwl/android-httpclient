@@ -95,13 +95,11 @@ public class HttpMultipartPost extends HttpPost {
 					bab.append(bs, 0, bs.length);
 				
 				bab.append(cl, 0, cl.length);
-				
-				if (!i.hasNext()) {
-					bab.append(dash, 0, dash.length);
-					bab.append(boundary, 0, boundary.length);
-					bab.append(dash, 0, dash.length);
-				}
 			}
+			
+			bab.append(dash, 0, dash.length);
+			bab.append(boundary, 0, boundary.length);
+			bab.append(dash, 0, dash.length);
 
 			reqBody = bab.toByteArray();
 		}
