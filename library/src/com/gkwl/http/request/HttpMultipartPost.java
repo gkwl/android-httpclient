@@ -74,6 +74,9 @@ public class HttpMultipartPost extends HttpPost {
 			
 			// files
 			for (UploadFile uf : files) {
+				if (uf.fieldName == null || uf.upload == null)
+					continue;
+				
 				bab.append(dash, 0, dash.length);
 				bab.append(boundary, 0, boundary.length);
 				bab.append(cl, 0, cl.length);
