@@ -3,7 +3,7 @@ package com.gkwl.http.request;
 import java.io.IOException;
 import java.io.OutputStream;
 
-public class HttpPost extends Http {
+public abstract class HttpPost extends Http {
 
 	@Override
 	protected String method() {
