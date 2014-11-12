@@ -161,8 +161,7 @@ public class RequestMultiplexer {
 					} catch (Exception e) {
 						e.printStackTrace();
 						request.notifyError(e);
-						if (!(e instanceof SocketTimeoutException))
-							return;
+						return;
 					}
 				}
 				
