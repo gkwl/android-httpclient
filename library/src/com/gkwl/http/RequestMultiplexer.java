@@ -1,7 +1,6 @@
 package com.gkwl.http;
 
 import java.io.IOException;
-import java.net.SocketTimeoutException;
 import java.util.LinkedList;
 import java.util.List;
 
@@ -135,8 +134,12 @@ public class RequestMultiplexer {
 				conn.connect(host, port, connectTimeout);
 				handleRequest();
 			} catch (Exception e) {
-				e.printStackTrace();
-				request.notifyError(e);
+			    synchronized (RequestMultiplexer.this) {
+                    threads.remove(this);
+                    request.notifyError(e);
+                    e.printStackTrace();
+                    return;
+                }
 			}
 		}
 		
@@ -159,28 +162,38 @@ public class RequestMultiplexer {
 						request.http.execute();
 						request.notifyResponse();
 					} catch (Exception e) {
-						e.printStackTrace();
-						request.notifyError(e);
-						return;
+					    synchronized (RequestMultiplexer.this) {
+    					    threads.remove(this);
+    					    request.notifyError(e);
+    						e.printStackTrace();
+    						return;
+					    }
 					}
 				}
 				
-				if (!conn.isAvaliable())
-					break;
+				if (!conn.isAvaliable()) {
+				    synchronized (RequestMultiplexer.this) {
+    				    threads.remove(this);
+    					return;
+				    }
+				}
 				
 				isReady = false;
 				
 				try {
 					Thread.sleep(connectionTimeout);
 					synchronized (RequestMultiplexer.this) {
+					    threads.remove(this);
 						conn.close();
-						threads.remove(this);
 						return;
 					}
 				} catch (InterruptedException e) {
 				} catch (IOException e) {
-					e.printStackTrace();
-					return;
+                    synchronized (RequestMultiplexer.this) {
+                        threads.remove(this);
+                        e.printStackTrace();
+                        return;
+                    }
 				}
 				
 			}
